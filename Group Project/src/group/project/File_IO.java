@@ -11,48 +11,49 @@ import java.io.FileNotFoundException;
 import java.util.Scanner;
 import java.io.File;
 import java.util.ArrayList;
+
 public class File_IO {
     //Define the file path
-    private static String path="event.csv";
-    private static String rc_path="recurrent.csv";
-    private static String r_path="reminder.csv";
-    private static String b_path="backup.csv";
+    private static String eventPath="event.csv";
+    private static String recurrentPath="recurrent.csv";
+    private static String reminderPath="reminder.csv";
+    private static String backupPath="backup.csv";
     
     //Cache the current maximum ID
-    private static int max_ID=0;
-    private static boolean ID_loaded=false;
+    private static int maxId=0;
+    private static boolean idLoaded=false;
     
     //Add "synchronized" to prevent conflicts in multi-threading.
-    public synchronized void save_event(Event a){
-        //Use object a to call its get method to obtain the attribute value
-        String event=a.get_event_ID()+"|"+a.get_title()+"|"+a.get_description()+"|"+a.get_start_time()+"|"+a.get_end_time()+"|"+a.get_location()+"|"+a.get_category();
+    public synchronized void saveEvent(Event event){
+        //Use object event to call its get method to obtain the attribute value
+        String eventLine=event.getEventId()+"|"+event.getTitle()+"|"+event.getDescription()+"|"+event.getStartDateTime()+"|"+event.getEndDateTime()+"|"+event.getLocation()+"|"+event.getCategory();
         
         //Write "line" into the file
-        try(FileWriter fw=new FileWriter(path,true)){// true represents enabling append mode
+        try(FileWriter fw=new FileWriter(eventPath,true)){// true represents enabling append mode
             //Wrap it in a PrintWriter.
             PrintWriter pw=new PrintWriter(fw);
-            pw.println(event);
+            pw.println(eventLine);
             
             //After the saving is successful, update the ID in the memory to ensure that the next acquisition is a new one.
-            if(a.get_event_ID()>max_ID){
-                max_ID=a.get_event_ID();
-                ID_loaded=true;
+            if(event.getEventId()>maxId){
+                maxId=event.getEventId();
+                idLoaded=true;
             }
         }catch(IOException e){
             System.out.println("Problem with file output.");
         }
     }
     
-    public int get_ID(){
+    public int getId(){
         //// If the ID has already been loaded, simply return the next one stored in the memory.
-        if(ID_loaded){
-            return max_ID+1;
+        if(idLoaded){
+            return maxId+1;
         }
         
         // Only when it is the first run or the file has not been loaded before, will the scanning of the file be carried out.
         int count=0;
         try{
-            File f=new File(path);
+            File f=new File(eventPath);
             if(!f.exists()){
                 // The default maximum ID is 0. If the file does not exist, the next ID will be 1.
                 return 1;
@@ -62,9 +63,9 @@ public class File_IO {
             try(Scanner s=new Scanner(f)){
                 while(s.hasNextLine()){
                     String line=s.nextLine();
-                    String[] event=line.split("\\|");
-                    if(Integer.parseInt(event[0])>count){
-                        count=Integer.parseInt(event[0]);
+                    String[] eventParts=line.split("\\|");
+                    if(Integer.parseInt(eventParts[0])>count){
+                        count=Integer.parseInt(eventParts[0]);
                     }
                 }
             }
@@ -73,16 +74,16 @@ public class File_IO {
         }
         
         // Update cache
-        max_ID=count;
-        ID_loaded=true;
+        maxId=count;
+        idLoaded=true;
         
         //Return to the next available ID
         return count+1;
     }
     
-    public ArrayList<Event> read_event(){
+    public ArrayList<Event> readEvents(){
         ArrayList<Event> al=new ArrayList<>();//Create an empty box
-        File f=new File(path);
+        File f=new File(eventPath);
         
         // If the file does not exist, directly return an empty box to prevent errors.
         if(!f.exists()){
@@ -95,22 +96,22 @@ public class File_IO {
                 if(line.trim().isEmpty()){
                     continue;
                 }else{
-                    String[] event=line.split("\\|");
-                    if(event.length>=7){
+                    String[] eventParts=line.split("\\|");
+                    if(eventParts.length>=7){
                         Event e=new Event();
-                        e.set_event_ID(Integer.parseInt(event[0]));
-                        e.set_title(event[1]);
-                        e.set_description(event[2]);
-                        e.set_start_time(event[3]);
-                        e.set_end_time(event[4]);
-                        e.set_location(event[5]);
-                        e.set_category(event[6]);
+                        e.setEventId(Integer.parseInt(eventParts[0]));
+                        e.setTitle(eventParts[1]);
+                        e.setDescription(eventParts[2]);
+                        e.setStartDateTime(eventParts[3]);
+                        e.setEndDateTime(eventParts[4]);
+                        e.setLocation(eventParts[5]);
+                        e.setCategory(eventParts[6]);
                         al.add(e);
                         
                         // Update ID cache
-                        if(e.get_event_ID()>max_ID){
-                            max_ID=e.get_event_ID();
-                            ID_loaded=true;
+                        if(e.getEventId()>maxId){
+                            maxId=e.getEventId();
+                            idLoaded=true;
                         }
                     }
                 }
@@ -123,22 +124,22 @@ public class File_IO {
         return al;
     }
     
-    public synchronized void save_recurrent(int ID, String interval, int times, String end_time){
-        String event=ID+"|"+interval+"|"+times+"|"+end_time;
+    public synchronized void saveRecurrent(int id, String interval, int times, String endTime){
+        String eventLine=id+"|"+interval+"|"+times+"|"+endTime;
         
         //Write "line" into the file
-        try(FileWriter fw=new FileWriter(rc_path,true)){// true represents enabling append mode
+        try(FileWriter fw=new FileWriter(recurrentPath,true)){// true represents enabling append mode
             //Wrap it in a PrintWriter.
             PrintWriter pw=new PrintWriter(fw);
-            pw.println(event);
+            pw.println(eventLine);
         }catch(IOException e){
             System.out.println("Problem with file output.");
         }
     }
     
-    public void backup_data(){
-        try(FileWriter fw=new FileWriter(b_path,false);PrintWriter pw=new PrintWriter(fw);){
-            File e=new File(path);
+    public void backupData(){
+        try(FileWriter fw=new FileWriter(backupPath,false);PrintWriter pw=new PrintWriter(fw);){
+            File e=new File(eventPath);
             if(e.exists()){
                 Scanner ev=new Scanner(e);
                 pw.println("Event");
@@ -147,7 +148,7 @@ public class File_IO {
                 }
                 ev.close();
             }
-            File r=new File(rc_path);
+            File r=new File(recurrentPath);
             if(r.exists()){
                 Scanner re=new Scanner(r);
                 pw.println();
@@ -162,29 +163,29 @@ public class File_IO {
         }
     }
     
-    public void rewrite_event(ArrayList<Event> allEvents){
-        try(FileWriter fw=new FileWriter(path,false);PrintWriter pw=new PrintWriter(fw)){
+    public void rewriteEvents(ArrayList<Event> allEvents){
+        try(FileWriter fw=new FileWriter(eventPath,false);PrintWriter pw=new PrintWriter(fw)){
             for(Event e: allEvents){
-                String event=e.get_event_ID()+"|"+e.get_title()+"|"+e.get_description()+"|"+e.get_start_time()+"|"+e.get_end_time()+"|"+e.get_location()+"|"+e.get_category();
-                pw.println(event);
+                String eventLine=e.getEventId()+"|"+e.getTitle()+"|"+e.getDescription()+"|"+e.getStartDateTime()+"|"+e.getEndDateTime()+"|"+e.getLocation()+"|"+e.getCategory();
+                pw.println(eventLine);
             }
         }catch(IOException e){
             System.out.println("Problem with file output.");
         }
     }
     
-    public synchronized void save_reminder(Reminder a){
-        String event=a.get_event_ID()+"|"+a.get_time()+"|"+a.get_message();
-        try(FileWriter fw=new FileWriter(r_path,true);PrintWriter pw=new PrintWriter(fw)){
-            pw.println(event);
+    public synchronized void saveReminder(Reminder reminder){
+        String eventLine=reminder.getEventId()+"|"+reminder.getTime()+"|"+reminder.getMessage();
+        try(FileWriter fw=new FileWriter(reminderPath,true);PrintWriter pw=new PrintWriter(fw)){
+            pw.println(eventLine);
         }catch(IOException e){
             System.out.println("Problem with file output.");
         }
     }
     
-    public ArrayList<Reminder> read_reminder(){
+    public ArrayList<Reminder> readReminders(){
         ArrayList<Reminder> al=new ArrayList<>();
-        File f=new File(r_path);
+        File f=new File(reminderPath);
         if(!f.exists()){
             return al;
         }
@@ -194,12 +195,12 @@ public class File_IO {
                 if(line.trim().isEmpty()){
                     continue;
                 }else{
-                    String[] reminder=line.split("\\|");
-                    if(reminder.length>=3){
+                    String[] reminderParts=line.split("\\|");
+                    if(reminderParts.length>=3){
                         Reminder r=new Reminder();
-                        r.set_event_ID(Integer.parseInt(reminder[0]));
-                        r.set_time(reminder[1]);
-                        r.set_message(reminder[2]);
+                        r.setEventId(Integer.parseInt(reminderParts[0]));
+                        r.setTime(reminderParts[1]);
+                        r.setMessage(reminderParts[2]);
                         al.add(r);
                     }
                 }
@@ -210,14 +211,14 @@ public class File_IO {
         return al;
     }
     
-    public void recover_data(){
-        File f=new File(b_path);
+    public void recoverData(){
+        File f=new File(backupPath);
         if(!f.exists()){
             return;
         }
         try(Scanner s=new Scanner(f)){
-            try(FileWriter e=new FileWriter(path,false);PrintWriter ev=new PrintWriter(e)){
-                try(FileWriter r=new FileWriter(rc_path,false);PrintWriter re=new PrintWriter(r)){
+            try(FileWriter e=new FileWriter(eventPath,false);PrintWriter ev=new PrintWriter(e)){
+                try(FileWriter r=new FileWriter(recurrentPath,false);PrintWriter re=new PrintWriter(r)){
                     boolean check=false;
                     while(s.hasNextLine()){
                         String line=s.nextLine();
