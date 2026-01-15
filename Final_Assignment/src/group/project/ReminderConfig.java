@@ -4,26 +4,26 @@ import java.time.Duration;
 
 public class ReminderConfig {
     private int eventId;
-    private String remindDuration; // stored as String (e.g. PT30M or "30") to match FileIOManager
+    private Duration remindDuration; 
     private boolean enable;
 
     public ReminderConfig() {
-        this.remindDuration = "PT30M";
+        this.remindDuration = Duration.ofMinutes(30);
         this.enable = false;
     }
 
-    public ReminderConfig(int eventId, String remindDuration, boolean enable) {
+    public ReminderConfig(int eventId, Duration remindDuration, boolean enable) {
         this.eventId = eventId;
         this.remindDuration = remindDuration;
         this.enable = enable;
     }
 
     public int getEventId() { return eventId; }
-    public String getRemindDuration() { return remindDuration; }
+    public Duration getRemindDuration() { return remindDuration != null ? remindDuration : Duration.ofMinutes(30); }
     public boolean isEnable() { return enable; }
 
     public void setEventId(int eventId) { this.eventId = eventId; }
-    public void setRemindDuration(String remindDuration) { this.remindDuration = remindDuration; }
+    public void setRemindDuration(Duration remindDuration) { this.remindDuration = remindDuration; }
     public void setEnable(boolean enable) { this.enable = enable; }
 
     /** Business helper: parse to Duration. Accept ISO-8601 Duration (PT30M) or plain minutes ("30"). */
@@ -46,3 +46,4 @@ public class ReminderConfig {
         return Duration.ofMinutes(30);
     }
 }
+
