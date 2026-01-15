@@ -9,7 +9,7 @@ package group.project;
  * @author 星飞
  */
 public class Reminder {
-    private int event_ID;
+    private int eventId;
     private String time;
     private String message;
     
@@ -17,23 +17,23 @@ public class Reminder {
         
     }
     
-    public int get_event_ID(){
-        return event_ID;
+    public int getEventId(){
+        return eventId;
     }
-    public String get_time(){
+    public String getTime(){
         return time;
     }
-    public String get_message(){
+    public String getMessage(){
         return message;
     }
     
-    public void set_event_ID(int a){
-        event_ID=a;
+    public void setEventId(int eventId){
+        this.eventId = eventId;
     }
-    public void set_time(String a){
-        time=a;
+    public void setTime(String time){
+        this.time = time;
     }
-    public void set_message(String a){
-        message=a;
+    public void setMessage(String message){
+        this.message = message;
     }
 }
