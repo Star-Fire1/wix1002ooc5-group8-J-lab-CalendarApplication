@@ -6,70 +6,79 @@ import java.util.*;
 
 public class EventManager {
     private final FileIOManager ioManager;
-
-    // In-memory stores for recurrent/reminder until FileIOManager supports them
     private final Map<Integer, RecurrentEvent> recurrentRulesByEventId = new HashMap<>();
 
     public EventManager(FileIOManager ioManager) {
         this.ioManager = ioManager;
+
+        // load from recurrent.csv (no more memory compensation)
+        for (RecurrentEvent r : ioManager.readAllRecurrentEventsFromCsv()) {
+            recurrentRulesByEventId.put(r.getEventId(), r);
+        }
     }
 
-    // --- Spec: createEvent ---
     public boolean createEvent(Event event, RecurrentEvent recurrentEvent) {
         if (!isEventValidForCreate(event)) return false;
 
-        // conflict check (optional but recommended)
+        // Optional: conflict check
         if (!checkEventConflict(event).isEmpty()) return false;
 
-        int newId = EventIdGenerator.generateNextEventId(ioManager);
+        int newId = EventIdGenerator.generateNextEventId();
         event.setEventId(newId);
-
         ioManager.writeEventToCsv(event);
 
         if (recurrentEvent != null && recurrentEvent.isEnabled()) {
             recurrentEvent.setEventId(newId);
             recurrentRulesByEventId.put(newId, recurrentEvent);
+            ioManager.writeRecurrentEventToCsv(recurrentEvent);
         }
         return true;
     }
 
-    // --- Spec: updateEvent ---
     public boolean updateEvent(Event updatedEvent, RecurrentEvent newRecurrentRule) {
         if (updatedEvent == null || updatedEvent.getEventId() <= 0) return false;
         if (!updatedEvent.isTimeValid()) return false;
         if (updatedEvent.getTitle() == null || updatedEvent.getTitle().trim().isEmpty()) return false;
 
-        // conflict check: ignore itself
+        // conflict check ignore itself
         List<Event> conflicts = checkEventConflict(updatedEvent);
         conflicts.removeIf(e -> e.getEventId() == updatedEvent.getEventId());
         if (!conflicts.isEmpty()) return false;
 
         boolean ok = ioManager.updateEventInCsv(updatedEvent);
+        if (!ok) return false;
 
-        if (ok) {
-            if (newRecurrentRule != null && newRecurrentRule.isEnabled()) {
-                newRecurrentRule.setEventId(updatedEvent.getEventId());
-                recurrentRulesByEventId.put(updatedEvent.getEventId(), newRecurrentRule);
-            } else {
-                recurrentRulesByEventId.remove(updatedEvent.getEventId());
-            }
+        int id = updatedEvent.getEventId();
+
+        if (newRecurrentRule != null && newRecurrentRule.isEnabled()) {
+            newRecurrentRule.setEventId(id);
+            recurrentRulesByEventId.put(id, newRecurrentRule);
+
+            // persistent update: try update first, if not found then append
+            boolean updated = ioManager.updateRecurrentEventInCsv(newRecurrentRule);
+            if (!updated) ioManager.writeRecurrentEventToCsv(newRecurrentRule);
+
+        } else {
+            recurrentRulesByEventId.remove(id);
+            ioManager.deleteRecurrentEventFromCsv(id);
         }
-        return ok;
+
+        return true;
     }
 
-    // --- Spec: deleteEvent ---
     public boolean deleteEvent(int eventId, boolean isDeleteEntireSeries) {
         if (eventId <= 0) return false;
 
-        // With current persistence, deleting entire series == deleting base + removing rule
         boolean ok = ioManager.deleteEventFromCsv(eventId);
-        if (ok) {
-            recurrentRulesByEventId.remove(eventId);
-        }
-        return ok;
+        if (!ok) return false;
+
+        // current storage is series-based: delete rule as well
+        recurrentRulesByEventId.remove(eventId);
+        ioManager.deleteRecurrentEventFromCsv(eventId);
+        return true;
     }
 
-    // --- Spec: generateRecurrentEvents ---
+    // --- recurrent generation (end <= endDate) ---
     public List<Event> generateRecurrentEvents(Event baseEvent, RecurrentEvent recurrentRule) {
         if (baseEvent == null || recurrentRule == null || !recurrentRule.isEnabled()) return Collections.emptyList();
         if (baseEvent.getStartDateTimeAsLdt() == null || baseEvent.getEndDateTimeAsLdt() == null) return Collections.emptyList();
@@ -78,23 +87,26 @@ public class EventManager {
         if (stepDays <= 0) return Collections.emptyList();
 
         List<Event> result = new ArrayList<>();
-
-        LocalDateTime start = baseEvent.getStartDateTimeAsLdt();
-        LocalDateTime end = baseEvent.getEndDateTimeAsLdt();
+        result.add(cloneWithShift(baseEvent, 0)); // base occurrence
 
         int times = recurrentRule.getRecurrentTimes();
-        LocalDate endDate = recurrentRule.getRecurrentEndDate();
+        LocalDate endDate = recurrentRule.getRecurrentEndDateAsLocalDate();
 
-        // Always include the base event itself as the first occurrence
-        result.add(cloneWithShift(baseEvent, 0));
-
+        // by times (if >0)
         if (times > 0) {
             for (int i = 1; i < times; i++) {
                 result.add(cloneWithShift(baseEvent, stepDays * i));
             }
-        } else if (endDate != null) {
+            return result;
+        }
+
+        // by end date (end <= endDate)
+        if (endDate != null) {
+            LocalDateTime baseEnd = baseEvent.getEndDateTimeAsLdt();
             int i = 1;
-            while (start.plusDays((long) stepDays * i).toLocalDate().isAfter(endDate) == false) {
+            while (true) {
+                LocalDateTime nextEnd = baseEnd.plusDays((long) stepDays * i);
+                if (nextEnd.toLocalDate().isAfter(endDate)) break;
                 result.add(cloneWithShift(baseEvent, stepDays * i));
                 i++;
             }
@@ -103,7 +115,6 @@ public class EventManager {
         return result;
     }
 
-    // --- Spec: checkEventConflict ---
     public List<Event> checkEventConflict(Event newEvent) {
         if (newEvent == null || newEvent.getStartDateTimeAsLdt() == null || newEvent.getEndDateTimeAsLdt() == null) {
             return Collections.emptyList();
@@ -113,8 +124,8 @@ public class EventManager {
         List<Event> conflicts = new ArrayList<>();
 
         for (Event e : all) {
-            // Overlap rule: (A.start < B.end) && (B.start < A.end)
             if (e.getStartDateTimeAsLdt() == null || e.getEndDateTimeAsLdt() == null) continue;
+
             boolean overlap = newEvent.getStartDateTimeAsLdt().isBefore(e.getEndDateTimeAsLdt())
                     && e.getStartDateTimeAsLdt().isBefore(newEvent.getEndDateTimeAsLdt());
             if (overlap) conflicts.add(e);
@@ -122,7 +133,6 @@ public class EventManager {
         return conflicts;
     }
 
-    // --- Utilities used by other managers ---
     public List<Event> getAllBaseEvents() {
         return ioManager.readAllEventsFromCsv();
     }
@@ -145,31 +155,22 @@ public class EventManager {
     private boolean isEventValidForCreate(Event event) {
         if (event == null) return false;
         if (event.getTitle() == null || event.getTitle().trim().isEmpty()) return false;
-        if (!event.isTimeValid()) return false;
-        return true;
+        return event.isTimeValid();
     }
 
     private int parseIntervalToDays(String interval) {
         if (interval == null) return -1;
         String s = interval.trim().toLowerCase();
-
-        // Minimal supported: Nd / Nw
         try {
-            if (s.endsWith("d")) {
-                int n = Integer.parseInt(s.substring(0, s.length() - 1));
-                return n;
-            }
-            if (s.endsWith("w")) {
-                int n = Integer.parseInt(s.substring(0, s.length() - 1));
-                return 7 * n;
-            }
-        } catch (NumberFormatException ignored) {}
+            if (s.endsWith("d")) return Integer.parseInt(s.substring(0, s.length() - 1));
+            if (s.endsWith("w")) return 7 * Integer.parseInt(s.substring(0, s.length() - 1));
+        } catch (Exception ignored) {}
         return -1;
     }
 
     private Event cloneWithShift(Event base, int shiftDays) {
         Event e = new Event();
-        e.setEventId(base.getEventId()); // keep series id for simplicity
+        e.setEventId(base.getEventId()); // series id
         e.setTitle(base.getTitle());
         e.setDescription(base.getDescription());
         e.setLocation(base.getLocation());
