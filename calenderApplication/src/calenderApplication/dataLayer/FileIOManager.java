@@ -138,7 +138,7 @@ public List<ReminderConfig> readAllReminderConfigs() {
         List<Event> allEvents = readAllEventsFromCsv();
         boolean found = false;
         
-        try (PrintWriter pw = new PrintWriter(new FileWriter(eventPath, false))) { // false 表示覆盖原文件
+        try (PrintWriter pw = new PrintWriter(new FileWriter(eventPath, false))) { 
             for (Event e : allEvents) {
                 if (e.getEventId() == updatedEvent.getEventId()) {
                     pw.println(eventToCsvLine(updatedEvent));
@@ -226,6 +226,7 @@ public synchronized void deleteReminderConfigFromCsv(int eventId) {
 }
 
 }
+
 
 
 
